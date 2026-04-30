@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import csv
+import random
 import shutil
 import subprocess
 import sys
@@ -76,6 +77,18 @@ PROVOCATIVE_TRUE_FACTS = [
     "Принцип неопределенности Гейзенберга: нельзя одновременно точно знать и положение, и импульс частицы.",
     "Философский сценарий “мозг в колбе” ставит вопрос: можно ли строго доказать, что наш опыт обязательно связан с внешней реальностью.",
 ]
+DIARY_NOTES = [
+    "Запись №1 — 17.09.1956\nСегодня я поймал себя на мысли, что время странно: раньше день тянулся бесконечно, а теперь неделя улетает мгновенно. Если я почти не замечаю жизнь, проживаю ли я ее по-настоящему?",
+    "Запись №2 — 04.02.1963\nМы смотрим друг на друга, но часто не видим. Каждый человек — как отдельный мир, и мы редко заходим даже в свой собственный.",
+    "Запись №3 — 28.11.1978\nЯ все время откладываю жизнь “на потом”. Но это “потом” никогда не наступает. Что, если жить нужно прямо внутри текущих дел?",
+    "Запись №4 — 13.07.1985\nНаблюдая за дождем, понял: мне всегда нужен повод остановиться. А дождь просто идет. Иногда лучше просто чувствовать, а не объяснять себе чувства.",
+    "Запись №5 — 22.05.1973\nРеальность глубже слов. Мы называем вещи — и будто все понятно, но за названиями всегда остается то, что можно только почувствовать.",
+    "Запись №6 — 09.03.1991\nТихий страх редко останавливает напрямую, но корректирует траекторию. Многое в жизни строится не из желания, а из избегания.",
+    "Запись №7 — 26.10.1969\nМир не спешит, даже когда спешим мы. Усталость часто не от дел, а от попытки идти против естественного ритма.",
+    "Запись №8 — 14.01.2002\nМы держимся за образ себя, как за что-то фиксированное. Но если честно, я меняюсь каждый день — иногда незаметно, иногда резко.",
+    "Запись №9 — 03.06.1980\nСамые важные вещи почти не имеют формы: внимание, состояние, внутренний тон. Их не видно, но они определяют весь день.",
+    "Запись №10 — 21.08.2005\nЖизнь не обязана быть полностью понятной, чтобы быть настоящей. Возможно, достаточно не понимать ее до конца и не проходить мимо.",
+]
 
 
 def render_background_music(track_path: Path) -> None:
@@ -85,17 +98,16 @@ def render_background_music(track_path: Path) -> None:
     components.html(
         f"""
         <div style="
-            border: 3px solid #202020;
+            border: 3px solid #7ea7ff;
             border-radius: 12px;
-            background: #fff4bb;
+            background: linear-gradient(135deg, #121c3a 0%, #1a2a57 100%);
             padding: 8px 10px;
             margin: 8px 0 10px 0;
-            box-shadow: 3px 3px 0 #202020;
+            box-shadow: 3px 3px 0 #0a0f22;
             font-family: sans-serif;
             font-weight: 700;
-            color: #111;
+            color: #ecf1ff;
         ">
-            🎵 Послушай, вселенная что-то хочет сказать тебе:
             <audio id="bg-track" controls autoplay loop style="width: 100%; margin-top: 6px;">
                 <source src="data:audio/mp3;base64,{audio_b64}" type="audio/mpeg">
             </audio>
@@ -128,6 +140,9 @@ def ensure_session_state() -> None:
         "result_forms_bytes": None,
         "result_emails_rows": 0,
         "result_forms_rows": 0,
+        "fact_slot": -1,
+        "fact_payload": "",
+        "fact_is_diary": False,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -181,6 +196,9 @@ def start_scrape_run(
     st.session_state["result_forms_bytes"] = None
     st.session_state["result_emails_rows"] = 0
     st.session_state["result_forms_rows"] = 0
+    st.session_state["fact_slot"] = -1
+    st.session_state["fact_payload"] = ""
+    st.session_state["fact_is_diary"] = False
 
 
 def finalize_process_result(stopped_by_user: bool = False) -> None:
@@ -259,6 +277,14 @@ def apply_cartoon_theme(running_mode: bool) -> None:
             -webkit-text-fill-color: {base_text} !important;
             caret-color: {base_text} !important;
             font-weight: 700 !important;
+        }}
+        div[data-testid="stFileUploader"] button {{
+            background: #ffde59 !important;
+            color: #121212 !important;
+            border: 3px solid {container_border} !important;
+            border-radius: 12px !important;
+            font-weight: 800 !important;
+            box-shadow: 2px 3px 0 {container_shadow} !important;
         }}
         div[data-testid="stTextArea"] textarea::placeholder {{
             color: {placeholder} !important;
@@ -345,20 +371,33 @@ if st.session_state["running"]:
         st.rerun()
 
     elapsed = max(time.time() - float(st.session_state.get("run_started_at") or 0.0), 0.0)
-    fact_idx = int(elapsed // FACT_ROTATE_SECONDS) % len(PROVOCATIVE_TRUE_FACTS)
-    fact = PROVOCATIVE_TRUE_FACTS[fact_idx]
+    current_slot = int(elapsed // FACT_ROTATE_SECONDS)
+    if current_slot != int(st.session_state.get("fact_slot", -1)):
+        st.session_state["fact_slot"] = current_slot
+        # Факты показываем чаще, записи реже.
+        if random.random() < 0.72:
+            st.session_state["fact_payload"] = random.choice(PROVOCATIVE_TRUE_FACTS)
+            st.session_state["fact_is_diary"] = False
+        else:
+            st.session_state["fact_payload"] = random.choice(DIARY_NOTES)
+            st.session_state["fact_is_diary"] = True
+
+    fact_text = str(st.session_state.get("fact_payload") or PROVOCATIVE_TRUE_FACTS[0])
+    is_diary = bool(st.session_state.get("fact_is_diary"))
+    card_title = "📝 Пока идет сбор... запись из архива" if is_diary else "⚡ Пока идет сбор... факт"
+    card_bg = "#f4e3aa" if is_diary else "#ffe999"
     st.markdown(
         f"""
         <div style="
             border: 4px solid #202020;
             border-radius: 16px;
-            background: #ffe999;
+            background: {card_bg};
             padding: 24px 18px;
             margin: 14px 0 14px 0;
             box-shadow: 5px 5px 0 #202020;
         ">
-            <div style="font-size: 1.4rem; font-weight: 900; color: #1a1a1a;">⚡ Пока идет сбор... факт #{fact_idx + 1}</div>
-            <div style="margin-top: 12px; font-size: 1.28rem; line-height: 1.35; font-weight: 800; color: #111;">{fact}</div>
+            <div style="font-size: 1.4rem; font-weight: 900; color: #1a1a1a;">{card_title}</div>
+            <div style="margin-top: 12px; font-size: 1.28rem; line-height: 1.35; font-weight: 800; color: #111;">{fact_text}</div>
             <div style="margin-top: 10px; font-size: 0.96rem; color: #2f2f2f;">
                 Прошло: {elapsed:.1f} сек
             </div>
