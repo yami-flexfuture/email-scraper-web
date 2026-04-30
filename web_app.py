@@ -53,7 +53,66 @@ def run_scraper_with_options(
     return subprocess.run(command, capture_output=True, text=True, check=False)
 
 
+def apply_cartoon_theme() -> None:
+    st.markdown(
+        """
+        <style>
+        .stApp {
+            background: linear-gradient(180deg, #7ec8e8 0%, #bde7f7 55%, #dff4ff 100%);
+        }
+        .block-container {
+            background: rgba(255, 252, 236, 0.96);
+            border: 4px solid #1f1f1f;
+            border-radius: 22px;
+            box-shadow: 7px 7px 0 #1f1f1f;
+            padding-top: 1.3rem;
+            padding-bottom: 1.3rem;
+            padding-left: 1.4rem;
+            padding-right: 1.4rem;
+            margin-top: 1.2rem;
+            margin-bottom: 1.2rem;
+        }
+        h1, h2, h3, p, label {
+            color: #1b1b1b !important;
+        }
+        div[data-testid="stFileUploader"] > section,
+        div[data-testid="stTextArea"] textarea {
+            border: 3px solid #222 !important;
+            border-radius: 14px !important;
+            background: #f4f7ff !important;
+        }
+        div[data-testid="stCheckbox"] label {
+            font-weight: 700 !important;
+        }
+        div[data-testid="stButton"] button,
+        div[data-testid="stDownloadButton"] button {
+            border: 3px solid #1f1f1f !important;
+            border-radius: 14px !important;
+            font-weight: 800 !important;
+            box-shadow: 3px 4px 0 #1f1f1f !important;
+        }
+        div[data-testid="stButton"] button[kind="primary"] {
+            background: #ff595e !important;
+            color: #fff7ec !important;
+        }
+        div[data-testid="stDownloadButton"] button {
+            background: #ffde59 !important;
+            color: #121212 !important;
+        }
+        div[data-testid="stMetric"] {
+            border: 3px solid #1f1f1f;
+            border-radius: 14px;
+            background: #fff9e2;
+            padding: 8px 10px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 st.set_page_config(page_title="Email Scraper", page_icon="📧", layout="centered")
+apply_cartoon_theme()
 st.title("📧 Сборщик имейлов по сайтам")
 st.write("Загрузите CSV или вставьте список сайтов (по одному на строку), затем запустите сбор.")
 
