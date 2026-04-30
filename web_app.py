@@ -9,6 +9,13 @@ from tempfile import TemporaryDirectory
 import streamlit as st
 
 
+def count_csv_rows(csv_path: Path) -> int:
+    if not csv_path.exists():
+        return 0
+    with csv_path.open("r", encoding="utf-8", newline="") as f:
+        return max(sum(1 for _ in f) - 1, 0)
+
+
 def build_input_csv(text_input: str, uploaded_file_bytes: bytes | None, target_path: Path) -> None:
     if uploaded_file_bytes:
         target_path.write_bytes(uploaded_file_bytes)
@@ -47,10 +54,64 @@ def run_scraper_with_options(
 
 
 st.set_page_config(page_title="Email Scraper", page_icon="📧", layout="centered")
-st.title("📧 Сборщик имейлов по сайтам")
-st.write("Загрузите CSV или вставьте список сайтов (по одному на строку), затем запустите сбор.")
+st.markdown(
+    """
+    <style>
+    .stApp {
+        background: linear-gradient(180deg, #88d6ff 0%, #e8f8ff 40%, #f9fdff 100%);
+    }
+    .cartoon-card {
+        background: #fff7dc;
+        border: 4px solid #111;
+        border-radius: 22px;
+        padding: 16px 18px;
+        box-shadow: 6px 6px 0 #111;
+        margin-bottom: 14px;
+    }
+    .cartoon-title {
+        font-size: 2.1rem;
+        font-weight: 900;
+        color: #111;
+        margin: 0;
+        line-height: 1.1;
+    }
+    .cartoon-subtitle {
+        font-size: 1rem;
+        color: #222;
+        margin-top: 8px;
+    }
+    .badge-row {
+        margin-top: 10px;
+    }
+    .badge {
+        display: inline-block;
+        background: #ffde59;
+        color: #111;
+        border: 3px solid #111;
+        border-radius: 999px;
+        padding: 4px 10px;
+        margin-right: 8px;
+        margin-bottom: 6px;
+        font-size: 0.82rem;
+        font-weight: 700;
+    }
+    </style>
+    <div class="cartoon-card">
+        <p class="cartoon-title">🧤 Сборщик имейлов: Школьный Хаос Edition</p>
+        <p class="cartoon-subtitle">
+            Закидывай сайты — мы ищем рабочие имейлы и контактные формы, пока город шумит.
+        </p>
+        <div class="badge-row">
+            <span class="badge">Top-3 email на домен</span>
+            <span class="badge">Contact forms отдельно</span>
+            <span class="badge">CSV in / CSV out</span>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 disable_browser_fallback = st.checkbox(
-    "Отключить browser fallback (рекомендуется для бесплатного облака)",
+    "Отключить browser fallback (для облака безопаснее и дешевле)",
     value=True,
 )
 
@@ -61,7 +122,7 @@ text_input = st.text_area(
     height=180,
 )
 
-run_clicked = st.button("Запустить сбор", type="primary")
+run_clicked = st.button("🚀 Погнали собирать", type="primary")
 
 if run_clicked:
     with TemporaryDirectory() as temp_dir:
@@ -77,7 +138,8 @@ if run_clicked:
             st.error(str(exc))
             st.stop()
 
-        with st.spinner("Скрапер работает... это может занять несколько минут на больших списках."):
+        st.info("🛰️ Запуск разведки по доменам... держим курс на полезные контакты.")
+        with st.spinner("Сканируем сайты... иногда это занимает пару минут."):
             result = run_scraper_with_options(
                 input_csv=input_csv,
                 output_csv=output_csv,
@@ -93,18 +155,24 @@ if run_clicked:
                 st.code(result.stdout)
             st.stop()
 
-        st.success("Готово. Можете скачать результаты.")
+        emails_rows = count_csv_rows(output_csv)
+        forms_rows = count_csv_rows(contact_forms_csv)
+
+        st.success("✅ Готово. Добыча завершена, можно забирать файлы.")
+        col1, col2 = st.columns(2)
+        col1.metric("📧 Email-строк", emails_rows)
+        col2.metric("📝 Доменов с формами", forms_rows)
         if result.stdout.strip():
             st.code(result.stdout)
 
         st.download_button(
-            label="Скачать emails_output.csv",
+            label="⬇️ Скачать emails_output.csv",
             data=output_csv.read_bytes(),
             file_name="emails_output.csv",
             mime="text/csv",
         )
         st.download_button(
-            label="Скачать contact_forms_output.csv",
+            label="⬇️ Скачать contact_forms_output.csv",
             data=contact_forms_csv.read_bytes(),
             file_name="contact_forms_output.csv",
             mime="text/csv",
