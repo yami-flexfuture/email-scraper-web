@@ -95,7 +95,7 @@ def render_background_music(track_path: Path) -> None:
             font-weight: 700;
             color: #111;
         ">
-            🎵 Фоновый трек (можно управлять громкостью):
+            🎵 Послушай, вселенная что-то хочет сказать тебе:
             <audio id="bg-track" controls autoplay loop style="width: 100%; margin-top: 6px;">
                 <source src="data:audio/mp3;base64,{audio_b64}" type="audio/mpeg">
             </audio>
@@ -211,67 +211,91 @@ def finalize_process_result(stopped_by_user: bool = False) -> None:
     cleanup_tmp_dir()
 
 
-def apply_cartoon_theme() -> None:
+def apply_cartoon_theme(running_mode: bool) -> None:
+    app_bg = (
+        "radial-gradient(circle at 20% 20%, #1b2746 0%, #101930 35%, #090f1e 100%)"
+        if running_mode
+        else "linear-gradient(180deg, #7ec8e8 0%, #bde7f7 55%, #dff4ff 100%)"
+    )
+    container_bg = "rgba(14, 20, 40, 0.92)" if running_mode else "rgba(255, 252, 236, 0.96)"
+    container_border = "#7ea7ff" if running_mode else "#1f1f1f"
+    container_shadow = "#0a0f22" if running_mode else "#1f1f1f"
+    base_text = "#ecf1ff" if running_mode else "#1b1b1b"
+    input_bg = "#111b36" if running_mode else "#f4f7ff"
+    input_border = "#7ea7ff" if running_mode else "#222"
+    placeholder = "#9bb0df" if running_mode else "#5a6270"
+    secondary_btn_bg = "#2a3e73" if running_mode else "#f0e3b1"
+    secondary_btn_color = "#eef4ff" if running_mode else "#171717"
+    metric_bg = "#101a35" if running_mode else "#fff9e2"
+    metric_text = "#eef4ff" if running_mode else "#121212"
+
     st.markdown(
-        """
+        f"""
         <style>
-        .stApp {
-            background: linear-gradient(180deg, #7ec8e8 0%, #bde7f7 55%, #dff4ff 100%);
-        }
-        .block-container {
-            background: rgba(255, 252, 236, 0.96);
-            border: 4px solid #1f1f1f;
+        .stApp {{
+            background: {app_bg};
+        }}
+        .block-container {{
+            background: {container_bg};
+            border: 4px solid {container_border};
             border-radius: 22px;
-            box-shadow: 7px 7px 0 #1f1f1f;
+            box-shadow: 7px 7px 0 {container_shadow};
             padding-top: 1.3rem;
             padding-bottom: 1.3rem;
             padding-left: 1.4rem;
             padding-right: 1.4rem;
             margin-top: 1.2rem;
             margin-bottom: 1.2rem;
-        }
-        h1, h2, h3, p, label {
-            color: #1b1b1b !important;
-        }
+        }}
+        h1, h2, h3, p, label {{
+            color: {base_text} !important;
+        }}
         div[data-testid="stFileUploader"] > section,
-        div[data-testid="stTextArea"] textarea {
-            border: 3px solid #222 !important;
+        div[data-testid="stTextArea"] textarea {{
+            border: 3px solid {input_border} !important;
             border-radius: 14px !important;
-            background: #f4f7ff !important;
-            color: #121212 !important;
-            -webkit-text-fill-color: #121212 !important;
-            caret-color: #121212 !important;
+            background: {input_bg} !important;
+            color: {base_text} !important;
+            -webkit-text-fill-color: {base_text} !important;
+            caret-color: {base_text} !important;
             font-weight: 700 !important;
-        }
-        div[data-testid="stTextArea"] textarea::placeholder {
-            color: #5a6270 !important;
-            -webkit-text-fill-color: #5a6270 !important;
+        }}
+        div[data-testid="stTextArea"] textarea::placeholder {{
+            color: {placeholder} !important;
+            -webkit-text-fill-color: {placeholder} !important;
             opacity: 1 !important;
-        }
-        div[data-testid="stCheckbox"] label {
+        }}
+        div[data-testid="stCheckbox"] label {{
             font-weight: 700 !important;
-        }
+        }}
         div[data-testid="stButton"] button,
-        div[data-testid="stDownloadButton"] button {
-            border: 3px solid #1f1f1f !important;
+        div[data-testid="stDownloadButton"] button {{
+            border: 3px solid {container_border} !important;
             border-radius: 14px !important;
             font-weight: 800 !important;
-            box-shadow: 3px 4px 0 #1f1f1f !important;
-        }
-        div[data-testid="stButton"] button[kind="primary"] {
+            box-shadow: 3px 4px 0 {container_shadow} !important;
+        }}
+        div[data-testid="stButton"] button[kind="primary"] {{
             background: #ff595e !important;
             color: #fff7ec !important;
-        }
-        div[data-testid="stDownloadButton"] button {
+        }}
+        div[data-testid="stButton"] button[kind="secondary"] {{
+            background: {secondary_btn_bg} !important;
+            color: {secondary_btn_color} !important;
+        }}
+        div[data-testid="stDownloadButton"] button {{
             background: #ffde59 !important;
             color: #121212 !important;
-        }
-        div[data-testid="stMetric"] {
-            border: 3px solid #1f1f1f;
+        }}
+        div[data-testid="stMetric"] {{
+            border: 3px solid {container_border};
             border-radius: 14px;
-            background: #fff9e2;
+            background: {metric_bg};
             padding: 8px 10px;
-        }
+        }}
+        div[data-testid="stMetric"] * {{
+            color: {metric_text} !important;
+        }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -279,10 +303,13 @@ def apply_cartoon_theme() -> None:
 
 
 st.set_page_config(page_title="Email Scraper", page_icon="📧", layout="centered")
-apply_cartoon_theme()
 ensure_session_state()
+apply_cartoon_theme(bool(st.session_state.get("running")))
 st.title("📧 Сборщик имейлов по сайтам")
-st.write("Загрузите CSV или вставьте список сайтов (по одному на строку), затем запустите сбор.")
+if st.session_state["running"]:
+    st.write("Космический режим активирован: идет сбор и трансляция фактов.")
+else:
+    st.write("Загрузите CSV или вставьте список сайтов (по одному на строку), затем запустите сбор.")
 
 if not st.session_state["running"]:
     disable_browser_fallback = st.checkbox(
@@ -317,31 +344,31 @@ if st.session_state["running"]:
         finalize_process_result(stopped_by_user=True)
         st.rerun()
 
-    music_track = Path(__file__).resolve().parent / "assets" / "background_track.mp3"
-    render_background_music(music_track)
-
     elapsed = max(time.time() - float(st.session_state.get("run_started_at") or 0.0), 0.0)
     fact_idx = int(elapsed // FACT_ROTATE_SECONDS) % len(PROVOCATIVE_TRUE_FACTS)
     fact = PROVOCATIVE_TRUE_FACTS[fact_idx]
     st.markdown(
         f"""
         <div style="
-            border: 3px solid #202020;
-            border-radius: 14px;
+            border: 4px solid #202020;
+            border-radius: 16px;
             background: #ffe999;
-            padding: 18px 14px;
-            margin: 12px 0 10px 0;
-            box-shadow: 4px 4px 0 #202020;
+            padding: 24px 18px;
+            margin: 14px 0 14px 0;
+            box-shadow: 5px 5px 0 #202020;
         ">
-            <div style="font-size: 1.2rem; font-weight: 900; color: #1a1a1a;">⚡ Пока идет сбор... факт #{fact_idx + 1}</div>
-            <div style="margin-top: 10px; font-size: 1.15rem; font-weight: 800; color: #111;">{fact}</div>
-            <div style="margin-top: 8px; font-size: 0.9rem; color: #2f2f2f;">
+            <div style="font-size: 1.4rem; font-weight: 900; color: #1a1a1a;">⚡ Пока идет сбор... факт #{fact_idx + 1}</div>
+            <div style="margin-top: 12px; font-size: 1.28rem; line-height: 1.35; font-weight: 800; color: #111;">{fact}</div>
+            <div style="margin-top: 10px; font-size: 0.96rem; color: #2f2f2f;">
                 Прошло: {elapsed:.1f} сек
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
+
+    music_track = Path(__file__).resolve().parent / "assets" / "background_track.mp3"
+    render_background_music(music_track)
 
     proc = st.session_state.get("proc")
     if proc is not None and proc.poll() is not None:
