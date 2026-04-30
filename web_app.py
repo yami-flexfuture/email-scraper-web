@@ -48,6 +48,7 @@ def build_scraper_command(
 ) -> list[str]:
     command = [
         sys.executable,
+        "-u",
         "scrape_emails.py",
         "--input",
         str(input_csv),
@@ -160,6 +161,7 @@ def ensure_session_state() -> None:
         "stderr_log_path": "",
         "last_log_size": 0,
         "last_log_growth_at": 0.0,
+        "target_hint": "",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -187,6 +189,20 @@ def start_scrape_run(
     output_csv = tmp_path / "emails_output.csv"
     contact_forms_csv = tmp_path / "contact_forms_output.csv"
     build_input_csv(text_input=text_input, uploaded_file_bytes=uploaded_file_bytes, target_path=input_csv)
+    target_hint = ""
+    if uploaded_file_bytes:
+        decoded = uploaded_file_bytes.decode("utf-8", errors="ignore")
+        for line in decoded.splitlines():
+            value = line.strip().strip('"')
+            if value and value.lower() not in {"website", "url", "domain", "site"}:
+                target_hint = value
+                break
+    else:
+        for line in text_input.splitlines():
+            value = line.strip()
+            if value:
+                target_hint = value
+                break
     command = build_scraper_command(
         input_csv=input_csv,
         output_csv=output_csv,
@@ -226,6 +242,7 @@ def start_scrape_run(
     st.session_state["stderr_log_path"] = str(stderr_log)
     st.session_state["last_log_size"] = 0
     st.session_state["last_log_growth_at"] = time.time()
+    st.session_state["target_hint"] = target_hint
 
 
 def finalize_process_result(stopped_by_user: bool = False) -> None:
@@ -271,6 +288,7 @@ def finalize_process_result(stopped_by_user: bool = False) -> None:
     st.session_state["stderr_log_path"] = ""
     st.session_state["last_log_size"] = 0
     st.session_state["last_log_growth_at"] = 0.0
+    st.session_state["target_hint"] = ""
     cleanup_tmp_dir()
 
 
@@ -492,6 +510,8 @@ if st.session_state["running"]:
             current_site = domain_match.group(1)
         else:
             current_site = last_line
+    elif st.session_state.get("target_hint"):
+        current_site = f"Стартуем с: {st.session_state['target_hint']}"
 
     seconds_since_growth = (
         now_ts - float(st.session_state.get("last_log_growth_at") or now_ts)
