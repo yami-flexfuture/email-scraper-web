@@ -147,9 +147,22 @@ def render_background_music(track_path: Path) -> None:
     audio_b64 = base64.b64encode(track_path.read_bytes()).decode("ascii")
     components.html(
         f"""
-        <audio id="bg-track" autoplay loop>
-            <source src="data:audio/mp3;base64,{audio_b64}" type="audio/mpeg">
-        </audio>
+        <div style="
+            border: 3px solid #202020;
+            border-radius: 12px;
+            background: #fff4bb;
+            padding: 8px 10px;
+            margin: 8px 0 10px 0;
+            box-shadow: 3px 3px 0 #202020;
+            font-family: sans-serif;
+            font-weight: 700;
+            color: #111;
+        ">
+            🎵 Фоновый трек (можно управлять громкостью):
+            <audio id="bg-track" controls autoplay loop style="width: 100%; margin-top: 6px;">
+                <source src="data:audio/mp3;base64,{audio_b64}" type="audio/mpeg">
+            </audio>
+        </div>
         <script>
             const el = document.getElementById("bg-track");
             if (el) {{
@@ -158,7 +171,7 @@ def render_background_music(track_path: Path) -> None:
             }}
         </script>
         """,
-        height=0,
+        height=120,
     )
 
 
