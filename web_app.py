@@ -157,6 +157,8 @@ def ensure_session_state() -> None:
         "fact_is_diary": False,
         "stdout_log_path": "",
         "stderr_log_path": "",
+        "last_log_size": 0,
+        "last_log_growth_at": 0.0,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -221,6 +223,8 @@ def start_scrape_run(
     st.session_state["fact_is_diary"] = False
     st.session_state["stdout_log_path"] = str(stdout_log)
     st.session_state["stderr_log_path"] = str(stderr_log)
+    st.session_state["last_log_size"] = 0
+    st.session_state["last_log_growth_at"] = time.time()
 
 
 def finalize_process_result(stopped_by_user: bool = False) -> None:
@@ -254,6 +258,8 @@ def finalize_process_result(stopped_by_user: bool = False) -> None:
             st.session_state["result_stderr"] = "Сбор остановлен пользователем."
     st.session_state["stdout_log_path"] = ""
     st.session_state["stderr_log_path"] = ""
+    st.session_state["last_log_size"] = 0
+    st.session_state["last_log_growth_at"] = 0.0
     cleanup_tmp_dir()
 
 
@@ -394,8 +400,11 @@ if not st.session_state["running"]:
 if st.session_state["running"]:
     st.markdown("### 🛰️ Идет сбор имейлов")
     st.info("Форма скрыта до завершения — сейчас показываем факты и состояние процесса.")
-    if st.button("⏹ Стоп сбор", type="secondary"):
+    stop_col, refresh_col = st.columns([1, 1])
+    if stop_col.button("⏹ Стоп сбор", type="secondary"):
         finalize_process_result(stopped_by_user=True)
+        st.rerun()
+    if refresh_col.button("🔄 Обновить статус", type="secondary"):
         st.rerun()
 
     elapsed = max(time.time() - float(st.session_state.get("run_started_at") or 0.0), 0.0)
@@ -441,6 +450,26 @@ if st.session_state["running"]:
     render_background_music(music_track)
 
     proc = st.session_state.get("proc")
+    stdout_log = Path(st.session_state.get("stdout_log_path") or "")
+    now_ts = time.time()
+    if stdout_log.exists():
+        current_size = stdout_log.stat().st_size
+        if current_size != int(st.session_state.get("last_log_size") or 0):
+            st.session_state["last_log_size"] = current_size
+            st.session_state["last_log_growth_at"] = now_ts
+
+    seconds_since_growth = (
+        now_ts - float(st.session_state.get("last_log_growth_at") or now_ts)
+    )
+    if seconds_since_growth > 45:
+        st.warning(
+            "Похоже, процесс долго не пишет новые логи. "
+            "Можно подождать еще немного или принудительно завершить."
+        )
+        if st.button("🧯 Принудительно завершить и вернуть интерфейс", type="secondary"):
+            finalize_process_result(stopped_by_user=True)
+            st.rerun()
+
     if proc is not None and proc.poll() is not None:
         finalize_process_result(stopped_by_user=False)
         st.rerun()
