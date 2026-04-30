@@ -105,6 +105,14 @@ DIARY_NOTES = [
 ]
 
 
+def build_rotation_queue() -> list[tuple[str, str]]:
+    queue: list[tuple[str, str]] = []
+    queue.extend([("fact", item) for item in PROVOCATIVE_TRUE_FACTS])
+    queue.extend([("diary", item) for item in DIARY_NOTES])
+    random.shuffle(queue)
+    return queue
+
+
 TRACK_STREAM_URL = (
     "https://raw.githubusercontent.com/yami-flexfuture/email-scraper-web/main/"
     "assets/background_track.mp3"
@@ -175,6 +183,7 @@ def ensure_session_state() -> None:
         "last_log_size": 0,
         "last_log_growth_at": 0.0,
         "target_hint": "",
+        "rotation_queue": [],
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -256,6 +265,7 @@ def start_scrape_run(
     st.session_state["last_log_size"] = 0
     st.session_state["last_log_growth_at"] = time.time()
     st.session_state["target_hint"] = target_hint
+    st.session_state["rotation_queue"] = []
 
 
 def finalize_process_result(stopped_by_user: bool = False) -> None:
@@ -302,6 +312,7 @@ def finalize_process_result(stopped_by_user: bool = False) -> None:
     st.session_state["last_log_size"] = 0
     st.session_state["last_log_growth_at"] = 0.0
     st.session_state["target_hint"] = ""
+    st.session_state["rotation_queue"] = []
     cleanup_tmp_dir()
 
 
@@ -451,13 +462,13 @@ if st.session_state["running"]:
     elapsed = max(time.time() - float(st.session_state.get("run_started_at") or 0.0), 0.0)
     next_switch_at = float(st.session_state.get("next_fact_switch_at") or 0.0)
     if elapsed >= next_switch_at:
-        # Факты показываем чаще, записи реже.
-        if random.random() < 0.72:
-            st.session_state["fact_payload"] = random.choice(PROVOCATIVE_TRUE_FACTS)
-            st.session_state["fact_is_diary"] = False
-        else:
-            st.session_state["fact_payload"] = random.choice(DIARY_NOTES)
-            st.session_state["fact_is_diary"] = True
+        queue = st.session_state.get("rotation_queue") or []
+        if not queue:
+            queue = build_rotation_queue()
+        item_kind, item_text = queue.pop(0)
+        st.session_state["rotation_queue"] = queue
+        st.session_state["fact_payload"] = item_text
+        st.session_state["fact_is_diary"] = item_kind == "diary"
         hold_for = FACT_ROTATE_SECONDS + (DIARY_EXTRA_SECONDS if st.session_state["fact_is_diary"] else 0.0)
         st.session_state["next_fact_switch_at"] = elapsed + hold_for
 
