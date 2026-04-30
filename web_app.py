@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import csv
 import html
 import os
@@ -95,10 +94,13 @@ DIARY_NOTES = [
 ]
 
 
-def render_background_music(track_path: Path) -> None:
-    if not track_path.exists():
-        return
-    audio_b64 = base64.b64encode(track_path.read_bytes()).decode("ascii")
+TRACK_STREAM_URL = (
+    "https://raw.githubusercontent.com/yami-flexfuture/email-scraper-web/main/"
+    "assets/background_track.mp3"
+)
+
+
+def render_background_music() -> None:
     components.html(
         f"""
         <div style="
@@ -113,7 +115,7 @@ def render_background_music(track_path: Path) -> None:
             color: #ecf1ff;
         ">
             <audio id="bg-track" controls autoplay loop style="width: 100%; margin-top: 6px;">
-                <source src="data:audio/mp3;base64,{audio_b64}" type="audio/mpeg">
+                <source src="{TRACK_STREAM_URL}" type="audio/mpeg">
             </audio>
         </div>
         <script>
@@ -476,8 +478,7 @@ if st.session_state["running"]:
         unsafe_allow_html=True,
     )
 
-    music_track = Path(__file__).resolve().parent / "assets" / "background_track.mp3"
-    render_background_music(music_track)
+    render_background_music()
 
     proc = st.session_state.get("proc")
     stdout_log = Path(st.session_state.get("stdout_log_path") or "")
