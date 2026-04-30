@@ -447,7 +447,6 @@ if not st.session_state["running"]:
             st.error(str(exc))
 
 if st.session_state["running"]:
-    st.markdown("### 🛰️ Идет сбор имейлов")
 
     elapsed = max(time.time() - float(st.session_state.get("run_started_at") or 0.0), 0.0)
     next_switch_at = float(st.session_state.get("next_fact_switch_at") or 0.0)
@@ -568,6 +567,7 @@ if st.session_state["running"]:
         unsafe_allow_html=True,
     )
 
+    st.markdown("<div style='margin-top: 14px;'></div>", unsafe_allow_html=True)
     if st.button("⏹ Стоп сбор", type="primary"):
         finalize_process_result(stopped_by_user=True)
         st.rerun()
