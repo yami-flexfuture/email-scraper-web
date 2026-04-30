@@ -64,7 +64,8 @@ def build_scraper_command(
         "--backoff-seconds",
         "0.25",
         "--max-workers",
-        "4",
+        "1",
+        "--debug",
     ]
     if disable_browser_fallback:
         command.append("--disable-browser-fallback")
