@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import subprocess
 import sys
+import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -51,6 +52,83 @@ def run_scraper_with_options(
     if disable_browser_fallback:
         command.append("--disable-browser-fallback")
     return subprocess.run(command, capture_output=True, text=True, check=False)
+
+
+FACT_ROTATE_SECONDS = 2.2
+PROVOCATIVE_TRUE_FACTS = [
+    "В конце XIX века героин официально продавали как лекарство от кашля.",
+    "Оригинальная формула Coca-Cola действительно содержала коку (источник кокаина).",
+    "В США продавали радиоактивный “тоник” Radithor — один из покупателей умер от лучевого поражения.",
+    "В 1932 году Австралия провела военную операцию против эму и фактически не добилась цели.",
+    "Во Франции в 1518 году случилась “танцевальная чума”: люди танцевали днями, пока не падали от истощения.",
+    "Проект CIA Acoustic Kitty пытался использовать кошек как шпионские устройства.",
+    "В Лондоне XIX века обои с мышьяком могли отравлять жильцов парами.",
+    "В Древнем Риме человеческую мочу использовали как средство для стирки и отбеливания тканей.",
+]
+
+
+def run_scraper_with_live_facts(
+    input_csv: Path,
+    output_csv: Path,
+    contact_forms_csv: Path,
+    disable_browser_fallback: bool,
+) -> subprocess.CompletedProcess[str]:
+    command = [
+        sys.executable,
+        "scrape_emails.py",
+        "--input",
+        str(input_csv),
+        "--output",
+        str(output_csv),
+        "--contact-forms-output",
+        str(contact_forms_csv),
+    ]
+    if disable_browser_fallback:
+        command.append("--disable-browser-fallback")
+
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    fact_box = st.empty()
+    start_ts = time.time()
+    fact_idx = 0
+    while process.poll() is None:
+        elapsed = max(time.time() - start_ts, 0.0)
+        fact = PROVOCATIVE_TRUE_FACTS[fact_idx % len(PROVOCATIVE_TRUE_FACTS)]
+        fact_box.markdown(
+            f"""
+            <div style="
+                border: 3px solid #202020;
+                border-radius: 14px;
+                background: #ffe999;
+                padding: 10px 12px;
+                margin: 10px 0 8px 0;
+                box-shadow: 4px 4px 0 #202020;
+            ">
+                <div style="font-weight: 900; color: #1a1a1a;">⚡ Пока идет сбор... факт #{fact_idx + 1}</div>
+                <div style="margin-top: 6px; font-weight: 700; color: #111;">{fact}</div>
+                <div style="margin-top: 6px; font-size: 0.82rem; color: #2f2f2f;">
+                    Прошло: {elapsed:.1f} сек
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        fact_idx += 1
+        time.sleep(FACT_ROTATE_SECONDS)
+
+    stdout, stderr = process.communicate()
+    fact_box.empty()
+    return subprocess.CompletedProcess(
+        args=command,
+        returncode=process.returncode,
+        stdout=stdout or "",
+        stderr=stderr or "",
+    )
 
 
 def apply_cartoon_theme() -> None:
@@ -146,7 +224,7 @@ if run_clicked:
 
         st.info("🛰️ Запуск разведки по доменам... держим курс на полезные контакты.")
         with st.spinner("Сканируем сайты... иногда это занимает пару минут."):
-            result = run_scraper_with_options(
+            result = run_scraper_with_live_facts(
                 input_csv=input_csv,
                 output_csv=output_csv,
                 contact_forms_csv=contact_forms_csv,
