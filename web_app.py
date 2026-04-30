@@ -433,14 +433,8 @@ if not st.session_state["running"]:
 if st.session_state["running"]:
     st.markdown("### 🛰️ Идет сбор имейлов")
     st.info("Форма скрыта до завершения — сейчас показываем факты и состояние процесса.")
-    stop_col, force_col, refresh_col = st.columns([1, 1, 1])
-    if stop_col.button("⏹ Стоп сбор", type="primary"):
+    if st.button("⏹ Стоп сбор", type="primary"):
         finalize_process_result(stopped_by_user=True)
-        st.rerun()
-    if force_col.button("🧯 Принудительное завершение", type="primary"):
-        finalize_process_result(stopped_by_user=True)
-        st.rerun()
-    if refresh_col.button("🔄 Обновить статус", type="secondary"):
         st.rerun()
 
     elapsed = max(time.time() - float(st.session_state.get("run_started_at") or 0.0), 0.0)
@@ -487,18 +481,27 @@ if st.session_state["running"]:
 
     proc = st.session_state.get("proc")
     stdout_log = Path(st.session_state.get("stdout_log_path") or "")
+    stderr_log = Path(st.session_state.get("stderr_log_path") or "")
     now_ts = time.time()
     last_line = ""
-    if stdout_log.exists():
-        current_size = stdout_log.stat().st_size
-        if current_size != int(st.session_state.get("last_log_size") or 0):
-            st.session_state["last_log_size"] = current_size
-            st.session_state["last_log_growth_at"] = now_ts
-        lines = stdout_log.read_text(encoding="utf-8", errors="ignore").splitlines()
+    stdout_size = stdout_log.stat().st_size if stdout_log.exists() else 0
+    stderr_size = stderr_log.stat().st_size if stderr_log.exists() else 0
+    current_size = stdout_size + stderr_size
+    if current_size != int(st.session_state.get("last_log_size") or 0):
+        st.session_state["last_log_size"] = current_size
+        st.session_state["last_log_growth_at"] = now_ts
+
+    def last_non_empty_line(path: Path) -> str:
+        if not path.exists():
+            return ""
+        lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
         for line in reversed(lines):
             if line.strip():
-                last_line = line.strip()
-                break
+                return line.strip()
+        return ""
+
+    # Большая часть structured-логов идет в stderr, поэтому читаем оба потока.
+    last_line = last_non_empty_line(stderr_log) or last_non_empty_line(stdout_log)
 
     current_site = "Ожидание первого лог-события..."
     if last_line:
@@ -519,11 +522,8 @@ if st.session_state["running"]:
     if seconds_since_growth > 45:
         st.warning(
             "Похоже, процесс долго не пишет новые логи. "
-            "Можно подождать еще немного или принудительно завершить."
+            "Можно подождать еще немного или нажать 'Стоп сбор'."
         )
-        if st.button("🧯 Принудительно завершить и вернуть интерфейс", type="primary"):
-            finalize_process_result(stopped_by_user=True)
-            st.rerun()
 
     st.markdown(
         f"""
