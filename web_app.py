@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import csv
 import html
+import os
 import random
 import re
 import shutil
@@ -233,8 +234,18 @@ def finalize_process_result(stopped_by_user: bool = False) -> None:
         st.session_state["running"] = False
         return
     if stopped_by_user and proc.poll() is None:
-        proc.terminate()
-    proc.wait()
+        try:
+            proc.terminate()
+            proc.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            try:
+                proc.kill()
+                proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                # As a last resort keep UI responsive even if OS process cleanup lags.
+                pass
+    elif proc.poll() is None:
+        proc.wait()
     stdout_log_path = st.session_state.get("stdout_log_path") or ""
     stderr_log_path = st.session_state.get("stderr_log_path") or ""
     stdout = Path(stdout_log_path).read_text(encoding="utf-8", errors="ignore") if stdout_log_path else ""
@@ -343,6 +354,10 @@ def apply_cartoon_theme(running_mode: bool) -> None:
             background: {secondary_btn_bg} !important;
             color: {secondary_btn_color} !important;
         }}
+        div[data-testid="stButton"] button:disabled {{
+            opacity: 0.9 !important;
+            filter: none !important;
+        }}
         div[data-testid="stDownloadButton"] button {{
             background: #ffde59 !important;
             color: #121212 !important;
@@ -400,8 +415,11 @@ if not st.session_state["running"]:
 if st.session_state["running"]:
     st.markdown("### 🛰️ Идет сбор имейлов")
     st.info("Форма скрыта до завершения — сейчас показываем факты и состояние процесса.")
-    stop_col, refresh_col = st.columns([1, 1])
-    if stop_col.button("⏹ Стоп сбор", type="secondary"):
+    stop_col, force_col, refresh_col = st.columns([1, 1, 1])
+    if stop_col.button("⏹ Стоп сбор", type="primary"):
+        finalize_process_result(stopped_by_user=True)
+        st.rerun()
+    if force_col.button("🧯 Принудительное завершение", type="primary"):
         finalize_process_result(stopped_by_user=True)
         st.rerun()
     if refresh_col.button("🔄 Обновить статус", type="secondary"):
@@ -452,11 +470,28 @@ if st.session_state["running"]:
     proc = st.session_state.get("proc")
     stdout_log = Path(st.session_state.get("stdout_log_path") or "")
     now_ts = time.time()
+    last_line = ""
     if stdout_log.exists():
         current_size = stdout_log.stat().st_size
         if current_size != int(st.session_state.get("last_log_size") or 0):
             st.session_state["last_log_size"] = current_size
             st.session_state["last_log_growth_at"] = now_ts
+        lines = stdout_log.read_text(encoding="utf-8", errors="ignore").splitlines()
+        for line in reversed(lines):
+            if line.strip():
+                last_line = line.strip()
+                break
+
+    current_site = "Ожидание первого лог-события..."
+    if last_line:
+        page_match = re.search(r"page=([^\s]+)", last_line)
+        domain_match = re.search(r"domain=([^\s]+)", last_line)
+        if page_match:
+            current_site = page_match.group(1)
+        elif domain_match:
+            current_site = domain_match.group(1)
+        else:
+            current_site = last_line
 
     seconds_since_growth = (
         now_ts - float(st.session_state.get("last_log_growth_at") or now_ts)
@@ -466,9 +501,29 @@ if st.session_state["running"]:
             "Похоже, процесс долго не пишет новые логи. "
             "Можно подождать еще немного или принудительно завершить."
         )
-        if st.button("🧯 Принудительно завершить и вернуть интерфейс", type="secondary"):
+        if st.button("🧯 Принудительно завершить и вернуть интерфейс", type="primary"):
             finalize_process_result(stopped_by_user=True)
             st.rerun()
+
+    st.markdown(
+        f"""
+        <div style="
+            border: 3px solid #7ea7ff;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #101a35 0%, #0e1630 100%);
+            color: #eaf0ff;
+            padding: 10px 12px;
+            margin-top: 10px;
+            box-shadow: 3px 3px 0 #0a0f22;
+        ">
+            <div style="font-weight: 900; font-size: 0.98rem;">🛰️ Сейчас обрабатывается:</div>
+            <div style="margin-top: 6px; font-weight: 700; font-size: 0.96rem; word-break: break-word;">
+                {html.escape(current_site)}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     if proc is not None and proc.poll() is not None:
         finalize_process_result(stopped_by_user=False)
