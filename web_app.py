@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import csv
 import subprocess
 import sys
@@ -8,6 +9,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 
 def count_csv_rows(csv_path: Path) -> int:
@@ -139,6 +141,27 @@ def run_scraper_with_live_facts(
     )
 
 
+def render_background_music(track_path: Path) -> None:
+    if not track_path.exists():
+        return
+    audio_b64 = base64.b64encode(track_path.read_bytes()).decode("ascii")
+    components.html(
+        f"""
+        <audio id="bg-track" autoplay loop>
+            <source src="data:audio/mp3;base64,{audio_b64}" type="audio/mpeg">
+        </audio>
+        <script>
+            const el = document.getElementById("bg-track");
+            if (el) {{
+                el.volume = 0.35;
+                el.play().catch(() => {{}});
+            }}
+        </script>
+        """,
+        height=0,
+    )
+
+
 def apply_cartoon_theme() -> None:
     st.markdown(
         """
@@ -231,6 +254,7 @@ if run_clicked:
         input_csv = temp_path / "input_websites.csv"
         output_csv = temp_path / "emails_output.csv"
         contact_forms_csv = temp_path / "contact_forms_output.csv"
+        music_track = Path(__file__).resolve().parent / "assets" / "background_track.mp3"
 
         try:
             uploaded_bytes = uploaded.getvalue() if uploaded is not None else None
@@ -239,6 +263,7 @@ if run_clicked:
             st.error(str(exc))
             st.stop()
 
+        render_background_music(music_track)
         st.info("🛰️ Запуск разведки по доменам... держим курс на полезные контакты.")
         with st.spinner("Сканируем сайты... иногда это занимает пару минут."):
             result = run_scraper_with_live_facts(
