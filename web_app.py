@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import base64
 import csv
+import html
 import random
+import re
 import shutil
 import subprocess
 import sys
@@ -59,6 +61,7 @@ def build_scraper_command(
 
 
 FACT_ROTATE_SECONDS = 4.2
+DIARY_EXTRA_SECONDS = 2.0
 PROVOCATIVE_TRUE_FACTS = [
     "1) В Древнем Риме использовали мочу как средство для стирки и чистки зубов",
     "2) У людей есть “второй мозг” в кишечнике\nОн содержит сотни миллионов нейронов и может работать независимо от головы.",
@@ -123,6 +126,16 @@ def render_background_music(track_path: Path) -> None:
     )
 
 
+def format_fact_or_note(text: str, is_diary: bool) -> str:
+    if not is_diary:
+        cleaned = re.sub(r"^\s*\d+\)\s*", "", text.strip())
+        cleaned = cleaned.lstrip(". ").strip()
+    else:
+        cleaned = text.strip()
+    escaped = html.escape(cleaned).replace("\n", "<br>")
+    return escaped
+
+
 def ensure_session_state() -> None:
     defaults = {
         "running": False,
@@ -139,9 +152,11 @@ def ensure_session_state() -> None:
         "result_forms_bytes": None,
         "result_emails_rows": 0,
         "result_forms_rows": 0,
-        "fact_slot": -1,
+        "next_fact_switch_at": 0.0,
         "fact_payload": "",
         "fact_is_diary": False,
+        "stdout_log_path": "",
+        "stderr_log_path": "",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -175,12 +190,18 @@ def start_scrape_run(
         contact_forms_csv=contact_forms_csv,
         disable_browser_fallback=disable_browser_fallback,
     )
+    stdout_log = tmp_path / "stdout.log"
+    stderr_log = tmp_path / "stderr.log"
+    out_f = stdout_log.open("w", encoding="utf-8")
+    err_f = stderr_log.open("w", encoding="utf-8")
     proc = subprocess.Popen(
         command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stdout=out_f,
+        stderr=err_f,
         text=True,
     )
+    out_f.close()
+    err_f.close()
     st.session_state["proc"] = proc
     st.session_state["running"] = True
     st.session_state["run_started_at"] = time.time()
@@ -195,9 +216,11 @@ def start_scrape_run(
     st.session_state["result_forms_bytes"] = None
     st.session_state["result_emails_rows"] = 0
     st.session_state["result_forms_rows"] = 0
-    st.session_state["fact_slot"] = -1
+    st.session_state["next_fact_switch_at"] = 0.0
     st.session_state["fact_payload"] = ""
     st.session_state["fact_is_diary"] = False
+    st.session_state["stdout_log_path"] = str(stdout_log)
+    st.session_state["stderr_log_path"] = str(stderr_log)
 
 
 def finalize_process_result(stopped_by_user: bool = False) -> None:
@@ -207,7 +230,11 @@ def finalize_process_result(stopped_by_user: bool = False) -> None:
         return
     if stopped_by_user and proc.poll() is None:
         proc.terminate()
-    stdout, stderr = proc.communicate()
+    proc.wait()
+    stdout_log_path = st.session_state.get("stdout_log_path") or ""
+    stderr_log_path = st.session_state.get("stderr_log_path") or ""
+    stdout = Path(stdout_log_path).read_text(encoding="utf-8", errors="ignore") if stdout_log_path else ""
+    stderr = Path(stderr_log_path).read_text(encoding="utf-8", errors="ignore") if stderr_log_path else ""
     st.session_state["result_code"] = proc.returncode
     st.session_state["result_stdout"] = stdout or ""
     st.session_state["result_stderr"] = stderr or ""
@@ -225,6 +252,8 @@ def finalize_process_result(stopped_by_user: bool = False) -> None:
         st.session_state["result_code"] = 130
         if not st.session_state["result_stderr"]:
             st.session_state["result_stderr"] = "Сбор остановлен пользователем."
+    st.session_state["stdout_log_path"] = ""
+    st.session_state["stderr_log_path"] = ""
     cleanup_tmp_dir()
 
 
@@ -370,9 +399,8 @@ if st.session_state["running"]:
         st.rerun()
 
     elapsed = max(time.time() - float(st.session_state.get("run_started_at") or 0.0), 0.0)
-    current_slot = int(elapsed // FACT_ROTATE_SECONDS)
-    if current_slot != int(st.session_state.get("fact_slot", -1)):
-        st.session_state["fact_slot"] = current_slot
+    next_switch_at = float(st.session_state.get("next_fact_switch_at") or 0.0)
+    if elapsed >= next_switch_at:
         # Факты показываем чаще, записи реже.
         if random.random() < 0.72:
             st.session_state["fact_payload"] = random.choice(PROVOCATIVE_TRUE_FACTS)
@@ -380,11 +408,15 @@ if st.session_state["running"]:
         else:
             st.session_state["fact_payload"] = random.choice(DIARY_NOTES)
             st.session_state["fact_is_diary"] = True
+        hold_for = FACT_ROTATE_SECONDS + (DIARY_EXTRA_SECONDS if st.session_state["fact_is_diary"] else 0.0)
+        st.session_state["next_fact_switch_at"] = elapsed + hold_for
 
     fact_text = str(st.session_state.get("fact_payload") or PROVOCATIVE_TRUE_FACTS[0])
     is_diary = bool(st.session_state.get("fact_is_diary"))
+    formatted_text = format_fact_or_note(fact_text, is_diary=is_diary)
     card_title = "📝 Запись из архива" if is_diary else "⚡ Интересный факт"
-    card_bg = "#f4e3aa" if is_diary else "#ffe999"
+    card_bg = "#dbc98a" if is_diary else "#ffe999"
+    card_text_color = "#101827"
     st.markdown(
         f"""
         <div style="
@@ -396,7 +428,7 @@ if st.session_state["running"]:
             box-shadow: 5px 5px 0 #202020;
         ">
             <div style="font-size: 1.4rem; font-weight: 900; color: #1a1a1a;">{card_title}</div>
-            <div style="margin-top: 12px; font-size: 1.28rem; line-height: 1.35; font-weight: 800; color: #111;">{fact_text}</div>
+            <div style="margin-top: 12px; font-size: 1.28rem; line-height: 1.35; font-weight: 800; color: {card_text_color}; white-space: normal;">{formatted_text}</div>
             <div style="margin-top: 10px; font-size: 0.96rem; color: #2f2f2f;">
                 Прошло: {elapsed:.1f} сек
             </div>
