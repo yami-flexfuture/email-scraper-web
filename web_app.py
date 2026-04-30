@@ -55,6 +55,16 @@ def build_scraper_command(
         str(output_csv),
         "--contact-forms-output",
         str(contact_forms_csv),
+        "--max-retries",
+        "1",
+        "--connect-timeout",
+        "5",
+        "--read-timeout",
+        "10",
+        "--backoff-seconds",
+        "0.25",
+        "--max-workers",
+        "4",
     ]
     if disable_browser_fallback:
         command.append("--disable-browser-fallback")
@@ -522,8 +532,8 @@ if st.session_state["running"]:
     )
     if seconds_since_growth > 45:
         st.warning(
-            "Похоже, процесс долго не пишет новые логи. "
-            "Можно подождать еще немного или нажать 'Стоп сбор'."
+            "Сайт отвечает слишком долго, ждем сетевой таймаут и переход к следующему. "
+            "Если нужно — нажмите 'Стоп сбор'."
         )
 
     st.markdown(
