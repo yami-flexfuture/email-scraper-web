@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import base64
 import csv
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
-from tempfile import TemporaryDirectory
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -35,12 +36,12 @@ def build_input_csv(text_input: str, uploaded_file_bytes: bytes | None, target_p
             writer.writerow([website])
 
 
-def run_scraper_with_options(
+def build_scraper_command(
     input_csv: Path,
     output_csv: Path,
     contact_forms_csv: Path,
     disable_browser_fallback: bool,
-) -> subprocess.CompletedProcess[str]:
+) -> list[str]:
     command = [
         sys.executable,
         "scrape_emails.py",
@@ -53,7 +54,7 @@ def run_scraper_with_options(
     ]
     if disable_browser_fallback:
         command.append("--disable-browser-fallback")
-    return subprocess.run(command, capture_output=True, text=True, check=False)
+    return command
 
 
 FACT_ROTATE_SECONDS = 4.2
@@ -75,70 +76,6 @@ PROVOCATIVE_TRUE_FACTS = [
     "Принцип неопределенности Гейзенберга: нельзя одновременно точно знать и положение, и импульс частицы.",
     "Философский сценарий “мозг в колбе” ставит вопрос: можно ли строго доказать, что наш опыт обязательно связан с внешней реальностью.",
 ]
-
-
-def run_scraper_with_live_facts(
-    input_csv: Path,
-    output_csv: Path,
-    contact_forms_csv: Path,
-    disable_browser_fallback: bool,
-) -> subprocess.CompletedProcess[str]:
-    command = [
-        sys.executable,
-        "scrape_emails.py",
-        "--input",
-        str(input_csv),
-        "--output",
-        str(output_csv),
-        "--contact-forms-output",
-        str(contact_forms_csv),
-    ]
-    if disable_browser_fallback:
-        command.append("--disable-browser-fallback")
-
-    process = subprocess.Popen(
-        command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-
-    fact_box = st.empty()
-    start_ts = time.time()
-    fact_idx = 0
-    while process.poll() is None:
-        elapsed = max(time.time() - start_ts, 0.0)
-        fact = PROVOCATIVE_TRUE_FACTS[fact_idx % len(PROVOCATIVE_TRUE_FACTS)]
-        fact_box.markdown(
-            f"""
-            <div style="
-                border: 3px solid #202020;
-                border-radius: 14px;
-                background: #ffe999;
-                padding: 10px 12px;
-                margin: 10px 0 8px 0;
-                box-shadow: 4px 4px 0 #202020;
-            ">
-                <div style="font-weight: 900; color: #1a1a1a;">⚡ Пока идет сбор... факт #{fact_idx + 1}</div>
-                <div style="margin-top: 6px; font-weight: 700; color: #111;">{fact}</div>
-                <div style="margin-top: 6px; font-size: 0.82rem; color: #2f2f2f;">
-                    Прошло: {elapsed:.1f} сек
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        fact_idx += 1
-        time.sleep(FACT_ROTATE_SECONDS)
-
-    stdout, stderr = process.communicate()
-    fact_box.empty()
-    return subprocess.CompletedProcess(
-        args=command,
-        returncode=process.returncode,
-        stdout=stdout or "",
-        stderr=stderr or "",
-    )
 
 
 def render_background_music(track_path: Path) -> None:
@@ -173,6 +110,105 @@ def render_background_music(track_path: Path) -> None:
         """,
         height=120,
     )
+
+
+def ensure_session_state() -> None:
+    defaults = {
+        "running": False,
+        "proc": None,
+        "run_started_at": 0.0,
+        "tmp_dir": "",
+        "input_csv_path": "",
+        "output_csv_path": "",
+        "contact_forms_csv_path": "",
+        "result_code": None,
+        "result_stdout": "",
+        "result_stderr": "",
+        "result_emails_bytes": None,
+        "result_forms_bytes": None,
+        "result_emails_rows": 0,
+        "result_forms_rows": 0,
+    }
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+
+
+def cleanup_tmp_dir() -> None:
+    tmp_dir = st.session_state.get("tmp_dir") or ""
+    if tmp_dir:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+    st.session_state["tmp_dir"] = ""
+    st.session_state["input_csv_path"] = ""
+    st.session_state["output_csv_path"] = ""
+    st.session_state["contact_forms_csv_path"] = ""
+
+
+def start_scrape_run(
+    text_input: str,
+    uploaded_file_bytes: bytes | None,
+    disable_browser_fallback: bool,
+) -> None:
+    tmp_dir = tempfile.mkdtemp(prefix="email_scraper_run_")
+    tmp_path = Path(tmp_dir)
+    input_csv = tmp_path / "input_websites.csv"
+    output_csv = tmp_path / "emails_output.csv"
+    contact_forms_csv = tmp_path / "contact_forms_output.csv"
+    build_input_csv(text_input=text_input, uploaded_file_bytes=uploaded_file_bytes, target_path=input_csv)
+    command = build_scraper_command(
+        input_csv=input_csv,
+        output_csv=output_csv,
+        contact_forms_csv=contact_forms_csv,
+        disable_browser_fallback=disable_browser_fallback,
+    )
+    proc = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    st.session_state["proc"] = proc
+    st.session_state["running"] = True
+    st.session_state["run_started_at"] = time.time()
+    st.session_state["tmp_dir"] = str(tmp_path)
+    st.session_state["input_csv_path"] = str(input_csv)
+    st.session_state["output_csv_path"] = str(output_csv)
+    st.session_state["contact_forms_csv_path"] = str(contact_forms_csv)
+    st.session_state["result_code"] = None
+    st.session_state["result_stdout"] = ""
+    st.session_state["result_stderr"] = ""
+    st.session_state["result_emails_bytes"] = None
+    st.session_state["result_forms_bytes"] = None
+    st.session_state["result_emails_rows"] = 0
+    st.session_state["result_forms_rows"] = 0
+
+
+def finalize_process_result(stopped_by_user: bool = False) -> None:
+    proc = st.session_state.get("proc")
+    if proc is None:
+        st.session_state["running"] = False
+        return
+    if stopped_by_user and proc.poll() is None:
+        proc.terminate()
+    stdout, stderr = proc.communicate()
+    st.session_state["result_code"] = proc.returncode
+    st.session_state["result_stdout"] = stdout or ""
+    st.session_state["result_stderr"] = stderr or ""
+    output_csv = Path(st.session_state.get("output_csv_path") or "")
+    forms_csv = Path(st.session_state.get("contact_forms_csv_path") or "")
+    if output_csv.exists():
+        st.session_state["result_emails_bytes"] = output_csv.read_bytes()
+        st.session_state["result_emails_rows"] = count_csv_rows(output_csv)
+    if forms_csv.exists():
+        st.session_state["result_forms_bytes"] = forms_csv.read_bytes()
+        st.session_state["result_forms_rows"] = count_csv_rows(forms_csv)
+    st.session_state["running"] = False
+    st.session_state["proc"] = None
+    if stopped_by_user:
+        st.session_state["result_code"] = 130
+        if not st.session_state["result_stderr"]:
+            st.session_state["result_stderr"] = "Сбор остановлен пользователем."
+    cleanup_tmp_dir()
 
 
 def apply_cartoon_theme() -> None:
@@ -244,75 +280,110 @@ def apply_cartoon_theme() -> None:
 
 st.set_page_config(page_title="Email Scraper", page_icon="📧", layout="centered")
 apply_cartoon_theme()
+ensure_session_state()
 st.title("📧 Сборщик имейлов по сайтам")
 st.write("Загрузите CSV или вставьте список сайтов (по одному на строку), затем запустите сбор.")
 
-disable_browser_fallback = st.checkbox(
-    "Отключить browser fallback (для облака безопаснее и дешевле)",
-    value=True,
-)
+if not st.session_state["running"]:
+    disable_browser_fallback = st.checkbox(
+        "Отключить browser fallback (для облака безопаснее и дешевле)",
+        value=True,
+    )
 
-uploaded = st.file_uploader("CSV файл со столбцом website/url/domain/site", type=["csv"])
-text_input = st.text_area(
-    "Или вставьте сайты списком",
-    placeholder="example.com\nhttps://site.com/blog/post\nnews-site.net",
-    height=180,
-)
+    uploaded = st.file_uploader("CSV файл со столбцом website/url/domain/site", type=["csv"])
+    text_input = st.text_area(
+        "Или вставьте сайты списком",
+        placeholder="example.com\nhttps://site.com/blog/post\nnews-site.net",
+        height=180,
+    )
 
-run_clicked = st.button("🚀 Погнали собирать", type="primary")
-
-if run_clicked:
-    with TemporaryDirectory() as temp_dir:
-        temp_path = Path(temp_dir)
-        input_csv = temp_path / "input_websites.csv"
-        output_csv = temp_path / "emails_output.csv"
-        contact_forms_csv = temp_path / "contact_forms_output.csv"
-        music_track = Path(__file__).resolve().parent / "assets" / "background_track.mp3"
-
+    run_clicked = st.button("🚀 Погнали собирать", type="primary")
+    if run_clicked:
         try:
             uploaded_bytes = uploaded.getvalue() if uploaded is not None else None
-            build_input_csv(text_input=text_input, uploaded_file_bytes=uploaded_bytes, target_path=input_csv)
-        except ValueError as exc:
-            st.error(str(exc))
-            st.stop()
-
-        render_background_music(music_track)
-        st.info("🛰️ Запуск разведки по доменам... держим курс на полезные контакты.")
-        with st.spinner("Сканируем сайты... иногда это занимает пару минут."):
-            result = run_scraper_with_live_facts(
-                input_csv=input_csv,
-                output_csv=output_csv,
-                contact_forms_csv=contact_forms_csv,
+            start_scrape_run(
+                text_input=text_input,
+                uploaded_file_bytes=uploaded_bytes,
                 disable_browser_fallback=disable_browser_fallback,
             )
+            st.rerun()
+        except ValueError as exc:
+            st.error(str(exc))
 
-        if result.returncode != 0:
-            st.error("Скрапер завершился с ошибкой.")
-            if result.stderr.strip():
-                st.code(result.stderr)
-            if result.stdout.strip():
-                st.code(result.stdout)
-            st.stop()
+if st.session_state["running"]:
+    st.markdown("### 🛰️ Идет сбор имейлов")
+    st.info("Форма скрыта до завершения — сейчас показываем факты и состояние процесса.")
+    if st.button("⏹ Стоп сбор", type="secondary"):
+        finalize_process_result(stopped_by_user=True)
+        st.rerun()
 
-        emails_rows = count_csv_rows(output_csv)
-        forms_rows = count_csv_rows(contact_forms_csv)
+    music_track = Path(__file__).resolve().parent / "assets" / "background_track.mp3"
+    render_background_music(music_track)
 
+    elapsed = max(time.time() - float(st.session_state.get("run_started_at") or 0.0), 0.0)
+    fact_idx = int(elapsed // FACT_ROTATE_SECONDS) % len(PROVOCATIVE_TRUE_FACTS)
+    fact = PROVOCATIVE_TRUE_FACTS[fact_idx]
+    st.markdown(
+        f"""
+        <div style="
+            border: 3px solid #202020;
+            border-radius: 14px;
+            background: #ffe999;
+            padding: 18px 14px;
+            margin: 12px 0 10px 0;
+            box-shadow: 4px 4px 0 #202020;
+        ">
+            <div style="font-size: 1.2rem; font-weight: 900; color: #1a1a1a;">⚡ Пока идет сбор... факт #{fact_idx + 1}</div>
+            <div style="margin-top: 10px; font-size: 1.15rem; font-weight: 800; color: #111;">{fact}</div>
+            <div style="margin-top: 8px; font-size: 0.9rem; color: #2f2f2f;">
+                Прошло: {elapsed:.1f} сек
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    proc = st.session_state.get("proc")
+    if proc is not None and proc.poll() is not None:
+        finalize_process_result(stopped_by_user=False)
+        st.rerun()
+    else:
+        time.sleep(1.0)
+        st.rerun()
+
+if not st.session_state["running"] and st.session_state.get("result_code") is not None:
+    result_code = int(st.session_state["result_code"])
+    if result_code == 0:
         st.success("✅ Готово. Добыча завершена, можно забирать файлы.")
-        col1, col2 = st.columns(2)
-        col1.metric("📧 Email-строк", emails_rows)
-        col2.metric("📝 Доменов с формами", forms_rows)
-        if result.stdout.strip():
-            st.code(result.stdout)
+    elif result_code == 130:
+        st.warning("⏹ Сбор остановлен пользователем.")
+    else:
+        st.error("Скрапер завершился с ошибкой.")
 
+    col1, col2 = st.columns(2)
+    col1.metric("📧 Email-строк", int(st.session_state.get("result_emails_rows") or 0))
+    col2.metric("📝 Доменов с формами", int(st.session_state.get("result_forms_rows") or 0))
+
+    result_stderr = str(st.session_state.get("result_stderr") or "").strip()
+    result_stdout = str(st.session_state.get("result_stdout") or "").strip()
+    if result_code != 0 and result_stderr:
+        st.code(result_stderr)
+    if result_stdout:
+        st.code(result_stdout)
+
+    emails_bytes = st.session_state.get("result_emails_bytes")
+    forms_bytes = st.session_state.get("result_forms_bytes")
+    if emails_bytes:
         st.download_button(
             label="⬇️ Скачать emails_output.csv",
-            data=output_csv.read_bytes(),
+            data=emails_bytes,
             file_name="emails_output.csv",
             mime="text/csv",
         )
+    if forms_bytes:
         st.download_button(
             label="⬇️ Скачать contact_forms_output.csv",
-            data=contact_forms_csv.read_bytes(),
+            data=forms_bytes,
             file_name="contact_forms_output.csv",
             mime="text/csv",
         )
