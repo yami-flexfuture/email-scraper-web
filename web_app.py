@@ -411,13 +411,13 @@ def apply_cartoon_theme(running_mode: bool) -> None:
 st.set_page_config(page_title="Email Scraper", page_icon="📧", layout="centered")
 ensure_session_state()
 apply_cartoon_theme(bool(st.session_state.get("running")))
-st.title("📧 Сборщик имейлов по сайтам")
 if st.session_state["running"]:
     st.markdown("## 🚀 Вы на борту межзвездного корабля разведки контактов")
     st.markdown(
         "###### Экспедиция в далекой галактике: сканируем сигналы и ищем контактные адреса древних цивилизаций."
     )
 else:
+    st.title("📧 Сборщик имейлов по сайтам")
     st.write("Загрузите CSV или вставьте список сайтов (по одному на строку), затем запустите сбор.")
 
 if not st.session_state["running"]:
@@ -448,10 +448,6 @@ if not st.session_state["running"]:
 
 if st.session_state["running"]:
     st.markdown("### 🛰️ Идет сбор имейлов")
-    st.info("Форма скрыта до завершения — сейчас показываем факты и состояние процесса.")
-    if st.button("⏹ Стоп сбор", type="primary"):
-        finalize_process_result(stopped_by_user=True)
-        st.rerun()
 
     elapsed = max(time.time() - float(st.session_state.get("run_started_at") or 0.0), 0.0)
     next_switch_at = float(st.session_state.get("next_fact_switch_at") or 0.0)
@@ -481,8 +477,8 @@ if st.session_state["running"]:
             padding: 20px 18px 52px 18px;
             margin: 14px 0 14px 0;
             box-shadow: 5px 5px 0 #202020;
-            min-height: 310px;
-            max-height: 310px;
+            min-height: 410px;
+            max-height: 410px;
             overflow-y: auto;
             box-sizing: border-box;
             position: relative;
@@ -571,6 +567,10 @@ if st.session_state["running"]:
         """,
         unsafe_allow_html=True,
     )
+
+    if st.button("⏹ Стоп сбор", type="primary"):
+        finalize_process_result(stopped_by_user=True)
+        st.rerun()
 
     if proc is not None and proc.poll() is not None:
         finalize_process_result(stopped_by_user=False)
