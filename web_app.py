@@ -413,7 +413,10 @@ ensure_session_state()
 apply_cartoon_theme(bool(st.session_state.get("running")))
 st.title("📧 Сборщик имейлов по сайтам")
 if st.session_state["running"]:
-    st.write("Космический режим активирован: идет сбор и трансляция фактов.")
+    st.markdown("## 🚀 Вы на борту межзвездного корабля разведки контактов")
+    st.markdown(
+        "###### Экспедиция в далекой галактике: сканируем сигналы и ищем контактные адреса древних цивилизаций."
+    )
 else:
     st.write("Загрузите CSV или вставьте список сайтов (по одному на строку), затем запустите сбор.")
 
@@ -475,17 +478,25 @@ if st.session_state["running"]:
             border: 4px solid #202020;
             border-radius: 16px;
             background: {card_bg};
-            padding: 20px 18px;
+            padding: 20px 18px 52px 18px;
             margin: 14px 0 14px 0;
             box-shadow: 5px 5px 0 #202020;
             min-height: 310px;
             max-height: 310px;
             overflow-y: auto;
             box-sizing: border-box;
+            position: relative;
         ">
             <div style="font-size: 1.4rem; font-weight: 900; color: #1a1a1a;">{card_title}</div>
             <div style="margin-top: 12px; font-size: 1.28rem; line-height: 1.35; font-weight: 800; color: {card_text_color}; white-space: normal;">{formatted_text}</div>
-            <div style="margin-top: 10px; font-size: 0.96rem; color: #2f2f2f;">
+            <div style="
+                position: absolute;
+                left: 18px;
+                right: 18px;
+                bottom: 12px;
+                font-size: 0.96rem;
+                color: #2f2f2f;
+            ">
                 Прошло: {elapsed:.1f} сек
             </div>
         </div>
