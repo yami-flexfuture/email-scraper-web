@@ -72,8 +72,8 @@ def build_scraper_command(
     return command
 
 
-FACT_ROTATE_SECONDS = 4.2
-DIARY_EXTRA_SECONDS = 2.0
+FACT_ROTATE_SECONDS = 6.0
+DIARY_EXTRA_SECONDS = 3.0
 PROVOCATIVE_TRUE_FACTS = [
     "1) В Древнем Риме использовали мочу как средство для стирки и чистки зубов",
     "2) У людей есть “второй мозг” в кишечнике\nОн содержит сотни миллионов нейронов и может работать независимо от головы.",
